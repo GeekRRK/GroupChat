@@ -1,0 +1,336 @@
+#include "TcpServer.h"
+#include <cstdlib>
+#include <fstream>
+#include <ctime>
+#include <iomanip>
+
+SOCKET TcpServer::serverSock;
+DB TcpServer::db;
+vector<SOCKET> TcpServer::clients;
+map<SOCKET, string> TcpServer::client_name;
+map<SOCKET, string> TcpServer::client_time;
+
+TcpServer::TcpServer(void){
+	cout << "ª∂”≠ π”√¡ƒÃÏ “π‹¿ÌœµÕ≥£¨«Îµ»¥˝”√ªßµƒ¡¨Ω”>>>";
+
+	if(!loadWSA())
+		exitWithErrorMessage("LoadWSA failed.");
+
+	if(!createSocket())
+		exitWithErrorMessage("Create server socket failed.");
+
+	if(!bindSocket(6000, "127.0.0.1"))
+		exitWithErrorMessage("BindSocket failed.");
+
+	if(!setListen(10))
+		exitWithErrorMessage("SetListen failed.");
+
+	if(!communicate())
+		exitWithErrorMessage("Communicate failed.");
+
+	if(!closeSocket())
+		exitWithErrorMessage("CloseSocket failed.");
+
+	closeWSA();
+}
+
+TcpServer::~TcpServer(void){
+}
+
+bool TcpServer::loadWSA(){
+	WSAData wsaData;
+
+	if(0 == WSAStartup(MAKEWORD(2, 2), &wsaData)){
+		return true;
+	}
+
+	return false;
+}
+
+void TcpServer::closeWSA(){
+	WSACleanup();
+}
+
+bool TcpServer::createSocket(int type/* = SOCK_STREAM */){
+	serverSock = socket(AF_INET, type, 0);
+
+	if(INVALID_SOCKET == serverSock){
+		return false;
+	}
+
+	return true;
+}
+
+bool TcpServer::bindSocket(short port, const char* ip){
+	SOCKADDR_IN address;
+
+	address.sin_family = AF_INET;
+	address.sin_addr.s_addr = inet_addr(ip);
+	address.sin_port = htons(port);
+	memset(address.sin_zero, 0, sizeof(address.sin_zero));
+
+	if(SOCKET_ERROR == bind(serverSock, (const struct sockaddr*)&address, sizeof(struct sockaddr))){
+		return false;
+	}
+
+	return true;
+}
+
+bool TcpServer::setListen(int number){
+	if(SOCKET_ERROR == listen(serverSock, number)){
+		return false;
+	}
+
+	return true;
+}
+
+bool TcpServer::closeSocket(){
+	if(SOCKET_ERROR == closesocket(serverSock)){
+		return false;
+	}
+
+	return true;
+}
+
+void TcpServer::exitWithErrorMessage(const string& errMsg){
+	cout << errMsg << endl;
+	system("pause");
+	exit(1);
+}
+
+bool TcpServer::communicate(){
+	SOCKADDR_IN addrClient;
+	SOCKET newSock;
+	HANDLE hThread1 = NULL, hThread2 = NULL;
+	int n = sizeof(struct sockaddr);
+	bool flag = true;
+
+	while(true){
+		newSock = accept(serverSock, (struct sockaddr*)&addrClient, &n);
+		if(INVALID_SOCKET == newSock){
+			cout << "Accept failed.\n";
+			flag = false;
+			break;
+		}
+
+		hThread1 = CreateThread(NULL, 0, recvMsg, (LPVOID)newSock, 0, NULL);
+		hThread2 = CreateThread(NULL, 0, sendMsg, (LPVOID)newSock, 0, NULL);
+		if(NULL == hThread1 || NULL == hThread2){
+			cout << "CreateThread failed.\n";
+			flag = false;
+			break;
+		}
+
+		CloseHandle(hThread1);
+		CloseHandle(hThread2);
+	}
+
+	closesocket(newSock);
+
+	return flag;
+}
+
+string TcpServer::getClientIpPort(SOCKET sock){
+	struct sockaddr_in sa;
+	int len = sizeof(sa);
+	string ip = "Œ¥÷™”√ªß";
+	string port = "Œ¥÷™∂Àø⁄";
+	
+	if(!getpeername((SOCKET)sock, (struct sockaddr*)&sa, &len)){
+		ip = inet_ntoa(sa.sin_addr);
+		char strPort[10] = {0};
+		_itoa_s(ntohs(sa.sin_port), strPort, sizeof(strPort), 10);
+		port = strPort;
+	}
+
+	return ip + "|" + port;
+}
+
+void TcpServer::notifyOtherClients(SOCKET sock, const string& msg){
+	for(vector<SOCKET>::const_iterator it = clients.begin(); it != clients.end(); ++it){
+		if(*it != sock){
+			send(*it, msg.c_str(), MTU, 0);
+		}
+	}
+}
+
+DWORD WINAPI TcpServer::recvMsg(LPVOID sockClient){
+	SOCKET sock = (SOCKET)sockClient;
+	char buffer[BUFFER_SIZE] = {0};
+	int errCode;
+
+	while(true){
+		memset(buffer, 0, BUFFER_SIZE);
+		errCode = recv(sock, buffer, MTU, 0);
+
+		if(0 == errCode || SOCKET_ERROR == errCode){
+			clientLogout(sock);
+			break;
+		}
+
+		dealWithMsg(sock, buffer);
+	}
+
+	return 0;
+}
+
+DWORD WINAPI TcpServer::sendMsg(LPVOID sock){
+	char buffer[BUFFER_SIZE] = {0};
+
+	while(true){
+		memset(buffer, 0, BUFFER_SIZE);
+		cin.get(buffer, BUFFER_SIZE);
+		clearBuffer();
+		if(MTU == strlen(buffer)){
+			cout << "ƒ˙ ‰»Îµƒƒ⁄»›π˝∂‡, ≤ø∑÷ƒ⁄»›ø…ƒ‹≤ªª·±ªΩ” ’µΩ." << endl;
+		}
+
+		notifyOtherClients(-1, string("BULLETIN") + buffer);
+	}
+
+	return 0;
+}
+
+void TcpServer::listClients(){
+	system("cls");
+
+	cout << "µ±«∞‘⁄œﬂ»À ˝Œ™£∫" << clients.size() << endl;
+	cout << endl;
+
+	cout.setf(ios::left);
+	cout.width(20);
+	cout << "”√ªßÍ«≥∆";
+	cout.setf(ios::left);
+	cout.width(20);
+	cout << "µÿ÷∑∂Àø⁄";
+	cout.setf(ios::left);
+	cout.width(20);
+	cout << "Ω¯»Î ±º‰" << endl;
+	cout << endl;
+
+	for(vector<SOCKET>::const_iterator it = clients.begin(); it != clients.end(); ++it){
+		cout.setf(ios::left);
+		cout.width(20);
+		cout << client_name.find(*it)->second;
+		cout.setf(ios::left);
+		cout.width(20);
+		cout << getClientIpPort(*it);
+		cout.setf(ios::left);
+		cout.width(20);
+		cout << client_time.find(*it)->second << endl;
+	}
+}
+
+void TcpServer::removeClient(SOCKET sock){
+	for(vector<SOCKET>::const_iterator it = clients.begin(); it != clients.end(); ++it){
+		if(*it == sock){
+			clients.erase(it);
+			break;
+		}
+	}
+}
+
+int TcpServer::checkNamePwd(const string& name, const string& pwd){
+
+	if(!db.existByName(name)){
+		User user;
+		user.setName(name);
+		user.setPassword(pwd);
+		db.insertUser(user);
+
+		return NEWUSER;
+	}else{
+		if(db.queryByName(name).getPassord() == pwd){
+			return OLDUSER;
+		}
+
+		return -1;
+	}
+}
+
+void TcpServer::clientLogin(SOCKET sock, const string& name){
+	clients.push_back(sock);
+	client_name.insert(pair<SOCKET, string>(sock, name));
+
+	time_t t = time(0); 
+	char tmp[64];
+	strftime(tmp, sizeof(tmp), "%m/%d  %A  %X", localtime(&t));
+	client_time.insert(pair<SOCKET, string>(sock, tmp));
+
+	User user;
+	user.setName(name);
+	user.setPassword("Œﬁ–ß");
+	user.setTime(tmp);
+	db.updateUser(user);
+	
+	notifyOtherClients(-1, client_name.find(sock)->second + "Ω¯»Î¡ƒÃÏ “");
+	listClients();
+}
+
+void TcpServer::clientLogout(SOCKET sock){
+	map<SOCKET, string>::const_iterator it = client_name.find(sock);
+	if(it == client_name.end()){
+		removeClient(sock);
+	}else{
+		notifyOtherClients(-1, client_name.find(sock)->second + "ÕÀ≥ˆ¡ƒÃÏ “");
+		removeClient(sock);
+		listClients();
+	}
+}
+
+void TcpServer::sendFile(SOCKET sock, const string& fileName){
+	ifstream infile(fileName.c_str());
+
+	const string FILE = "FILE";
+	const string CONTINUE = "CONTINUE";
+	const string END = "END";
+
+	if(!infile){
+		send(sock, "√ª”–¥ÀŒƒº˛", strlen("√ª”–¥ÀŒƒº˛"), 0);
+	}else{
+		string fileHead = FILE + string(fileName).substr(string(fileName).find_last_of("\\") + 1);
+		send(sock, fileHead.c_str(), MTU, 0);
+
+		string msg = "";
+		string s;
+		while(getline(infile, s)){
+			msg = msg + s + '\n';
+		}
+		infile.close();
+		
+		while(msg.size() + END.size() > MTU){
+			msg = CONTINUE + msg;
+			send(sock, msg.substr(0, MTU).c_str(), MTU, 0);
+			msg = msg.substr(MTU);
+		}
+		send(sock, (END + msg).c_str(), MTU, 0);
+	}
+}
+
+void TcpServer::dealWithMsg(SOCKET sock, const string& msg){
+	const string NAME = "NAME";
+	const string LOGINFAILURE = "LOGINFAILURE";
+
+	if(msg.substr(0, NAME.size()) == NAME){
+		string name = msg.substr(NAME.size(), msg.find_first_of("#") - NAME.size());
+		string password = msg.substr(msg.find_first_of("#") + 1);
+		if(NEWUSER == checkNamePwd(name, password)){
+			send(sock, "’‚ «ƒ˙µ⁄“ª¥Œµ«¬Ω, «Î¿Œº«”√ªß√˚∫Õ√‹¬Î.", MTU, 0);
+			clientLogin(sock, name);
+		}else if(OLDUSER == checkNamePwd(name, password)){
+			send(sock, ("ƒ˙◊ÓΩ¸“ª¥Œµ«¬Ω ±º‰Œ™: " + db.queryByName(name).getTime() + ", »Á≤ª «±æ»Àµ«¬Ω«Î¡™œµπ‹¿Ì‘±.").c_str(), MTU, 0);
+			clientLogin(sock, name);
+		}else{
+			send(sock, LOGINFAILURE.c_str(), MTU, 0);
+		}
+	}else if(string::npos != msg.find(":\\") || string::npos != msg.find(":/")){
+		sendFile(sock, msg);
+	}else{
+		notifyOtherClients(sock, client_name.find(sock)->second +  ": " + msg);
+	}
+}
+
+void TcpServer::clearBuffer(){
+	char ch;
+	while((ch = getchar()) != '\n' && ch != EOF);
+}ˇ

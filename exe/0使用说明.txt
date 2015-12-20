@@ -1,0 +1,7 @@
+MYSQL数据库连接设置：
+user = "root"
+password = ""
+ip = "localhost"
+
+<数据表有变动，一定要重新运行这个新的chat.sql文件>
+打开Navicat，双击打开名为chat的数据库，（如果没有手动建一个名为chat的数据库，字符集为utf-8），再右键chat数据库选择运行MSYQL文件，选择给你的文件夹下的chat.sql文件，开始, 显示successfully之后选择关闭。
