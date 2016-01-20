@@ -1,13 +1,14 @@
+//Refer to: http://blog.csdn.net/shouhuqi/article/details/8038567
 /*
-	0:�����׽��ֿ⣨WSAStartup()��
-	1:�����׽��֣�socket()��
-	2:���׽��ֵ�һ��IP��ַ��һ���˿��ϣ�bind()��
-	3:���׽�������Ϊ����ģʽ�ȴ���������listen()��
-	4:�������󣬽����������󣬷���һ���µĶ�Ӧ�ڴ˴����ӵ��׽��֣�accept()��
-	5:�÷��ص��׽��ֺͿͻ��˽���ͨ�ţ�send()/recv��
-	6:���أ��ȴ���һ��������
-	7���ر��׽��֣�closesocket()��
-	8:�رռ��ص��׽��ֿ⣨WSACleanup()��
+	0:加载套接字库（WSAStartup()）
+	1:创建套接字（socket()）
+	2:绑定套接字到一个IP地址和一个端口上（bind()）
+	3:将套接字设置为监听模式等待连接请求（listen()）
+	4:请求到来后，接受连接请求，返回一个新的对应于此次连接的套接字（accept()）
+	5:用返回的套接字和客户端进行通信（send()/recv）
+	6:返回，等待另一连接请求
+	7：关闭套接字（closesocket()）
+	8:关闭加载的套接字库（WSACleanup()）
 */
 
 #pragma once
@@ -130,7 +131,7 @@ DWORD WINAPI ClientThread(LPVOID sockClient){
 			cout << "Client exit.\n";
 			break;
 		}
-		cout << "Message from client��" << buffer << endl;
+		cout << "Message from client：" << buffer << endl;
 		send(sock, "Welcome.", strlen("Welcome."), 0);
 	}
 	return 0;
